@@ -117,6 +117,12 @@
     .missed-review p { margin: 5px 0; font-size: 12px; }
     .missed-review strong { color: var(--text); }
     .perfect-score { margin: 18px 0 0 !important; color: var(--green) !important; font-weight: 650; }
+    .secondary { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 11px 18px; margin-top: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font-weight: 650; font-size: 14px; cursor: pointer; transition: background .2s, border-color .2s, transform .2s; }
+    .secondary:hover { border-color: var(--accent); background: var(--soft); transform: translateY(-1px); }
+    .results .copy-status { min-height: 1.6em; color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+    .copy-fallback { margin-top: 12px; text-align: left; }
+    .copy-fallback label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
+    .copy-fallback textarea { display: block; width: 100%; min-height: 64px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; resize: vertical; }
     @keyframes float { 50% { transform: translateY(-6px) rotate(2deg); } }
     @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes celebrate { 50% { transform: scale(1.025); box-shadow: 0 0 0 5px #65bb8220; } }
@@ -179,6 +185,12 @@
       <section class="missed-review" id="missed-review" aria-label="Missed answer review" hidden>
         <ol id="missed-answers"></ol>
       </section>
+      <button class="secondary" id="copy-result" type="button">Copy result</button>
+      <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+      <div class="copy-fallback" id="copy-fallback" hidden>
+        <label for="copy-text">Copy this result manually</label>
+        <textarea id="copy-text" rows="2" readonly></textarea>
+      </div>
       <button class="primary" id="restart">Explore again <span aria-hidden="true">↻</span></button>
     </section>
     <p class="hint" id="hint">Choose your answer, then continue. <span aria-hidden="true">Keys <kbd>1</kbd>–<kbd>4</kbd> work, too.</span></p>
@@ -203,21 +215,33 @@
     let score = 0;
     let answered = false;
     const missedAnswers = [];
+    let activeQuestions = questions;
+
+    function shuffleQuestions() {
+      const shuffled = [...questions];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
 
     function updateProgress(completed) {
-      $("progress").style.width = `${completed / questions.length * 100}%`;
-      document.querySelector('[role="progressbar"]').setAttribute("aria-valuenow", completed);
+      $("progress").style.width = `${completed / activeQuestions.length * 100}%`;
+      const progressBar = document.querySelector('[role="progressbar"]');
+      progressBar.setAttribute("aria-valuemax", activeQuestions.length);
+      progressBar.setAttribute("aria-valuenow", completed);
     }
 
     function renderQuestion(focus = false) {
       answered = false;
-      const item = questions[current];
-      $("progress-label").innerHTML = `<strong>Question ${String(current + 1).padStart(2, "0")}</strong> / ${questions.length}`;
+      const item = activeQuestions[current];
+      $("progress-label").innerHTML = `<strong>Question ${String(current + 1).padStart(2, "0")}</strong> / ${activeQuestions.length}`;
       $("category").textContent = item.category;
       $("question").textContent = item.question;
       $("feedback").hidden = true;
       $("next").disabled = true;
-      $("next").innerHTML = `${current === questions.length - 1 ? "See my results" : "Next question"} <span aria-hidden="true">→</span>`;
+      $("next").innerHTML = `${current === activeQuestions.length - 1 ? "See my results" : "Next question"} <span aria-hidden="true">→</span>`;
       $("answers").replaceChildren(...item.options.map((option, index) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -239,7 +263,7 @@
     function selectAnswer(index) {
       if (answered) return;
       answered = true;
-      const item = questions[current];
+      const item = activeQuestions[current];
       const correct = index === item.correct;
       if (correct) score++;
       else missedAnswers.push({
@@ -300,7 +324,7 @@
         }
         return entry;
       }));
-      $("progress-label").textContent = "10 of 10 questions completed";
+      $("progress-label").textContent = `${activeQuestions.length} of ${activeQuestions.length} questions completed`;
       const result = score >= 8
         ? ["🚀", "Rocket", "You’re a cosmic natural!", "Stellar work. Your space knowledge is ready for its next mission."]
         : score >= 5
@@ -310,9 +334,9 @@
       $("reaction").setAttribute("aria-label", result[1]);
       $("result-title").textContent = result[2];
       $("result-message").textContent = result[3];
-      $("final-score").textContent = `${score} / ${questions.length}`;
+      $("final-score").textContent = `${score} / ${activeQuestions.length}`;
       $("correct-total").textContent = score;
-      $("accuracy").textContent = `${score / questions.length * 100}%`;
+      $("accuracy").textContent = `${score / activeQuestions.length * 100}%`;
       $("result-title").focus();
     }
 
@@ -322,27 +346,52 @@
       $("review-toggle").textContent = expanded ? "Hide missed answers" : "Review missed answers";
       $("missed-review").hidden = !expanded;
     });
+    function getResultSummary() {
+      const accuracy = Math.round(score / questions.length * 100);
+      return `Orbit space quiz: ${score}/${questions.length} correct (${accuracy}% accuracy)`;
+    }
+
+    async function copyResult() {
+      const summary = getResultSummary();
+      try {
+        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+          throw new Error("Clipboard access is unavailable");
+        }
+        await navigator.clipboard.writeText(summary);
+        $("copy-status").textContent = "Result copied to clipboard.";
+      } catch {
+        $("copy-status").textContent = "Copying failed. Select and copy the result below.";
+        $("copy-text").value = summary;
+        $("copy-fallback").hidden = false;
+      }
+    }
+
     $("next").addEventListener("click", () => {
       if (!answered) return;
-      if (current === questions.length - 1) showResults();
+      if (current === activeQuestions.length - 1) showResults();
       else { current++; renderQuestion(true); }
     });
     $("restart").addEventListener("click", () => {
       current = 0;
       score = 0;
       missedAnswers.length = 0;
-      $("score").textContent = "✦  0 points";
       $("review-toggle").hidden = true;
       $("review-toggle").setAttribute("aria-expanded", "false");
       $("review-toggle").textContent = "Review missed answers";
       $("perfect-score").hidden = true;
       $("missed-review").hidden = true;
       $("missed-answers").replaceChildren();
+      activeQuestions = shuffleQuestions();
+      $("score").textContent = "✦  0 points";
+      $("copy-status").textContent = "";
+      $("copy-text").value = "";
+      $("copy-fallback").hidden = true;
       $("results").hidden = true;
       $("quiz").hidden = false;
       $("hint").hidden = false;
       renderQuestion(true);
     });
+    $("copy-result").addEventListener("click", copyResult);
     document.addEventListener("keydown", (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.repeat || $("quiz").hidden || answered) return;
       if (/^[1-4]$/.test(event.key)) {
