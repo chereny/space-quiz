@@ -109,6 +109,12 @@
     .result-score span { color: var(--muted); font-size: 12px; }
     .result-stats { display: flex; justify-content: center; gap: 35px; font-size: 12px; color: var(--muted); }
     .result-stats strong { display: block; font-size: 19px; color: var(--text); }
+    .secondary { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 11px 18px; margin-top: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font-weight: 650; font-size: 14px; cursor: pointer; transition: background .2s, border-color .2s, transform .2s; }
+    .secondary:hover { border-color: var(--accent); background: var(--soft); transform: translateY(-1px); }
+    .results .copy-status { min-height: 1.6em; color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+    .copy-fallback { margin-top: 12px; text-align: left; }
+    .copy-fallback label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
+    .copy-fallback textarea { display: block; width: 100%; min-height: 64px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; resize: vertical; }
     @keyframes float { 50% { transform: translateY(-6px) rotate(2deg); } }
     @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes celebrate { 50% { transform: scale(1.025); box-shadow: 0 0 0 5px #65bb8220; } }
@@ -166,6 +172,12 @@
       <p id="result-message"></p>
       <div class="result-score"><strong id="final-score"></strong><span>your mission score</span></div>
       <div class="result-stats"><div><strong id="correct-total"></strong>Correct answers</div><div><strong id="accuracy"></strong>Accuracy</div></div>
+      <button class="secondary" id="copy-result" type="button">Copy result</button>
+      <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+      <div class="copy-fallback" id="copy-fallback" hidden>
+        <label for="copy-text">Copy this result manually</label>
+        <textarea id="copy-text" rows="2" readonly></textarea>
+      </div>
       <button class="primary" id="restart">Explore again <span aria-hidden="true">↻</span></button>
     </section>
     <p class="hint" id="hint">Choose your answer, then continue. <span aria-hidden="true">Keys <kbd>1</kbd>–<kbd>4</kbd> work, too.</span></p>
@@ -274,6 +286,26 @@
       $("result-title").focus();
     }
 
+    function getResultSummary() {
+      const accuracy = Math.round(score / questions.length * 100);
+      return `Orbit space quiz: ${score}/${questions.length} correct (${accuracy}% accuracy)`;
+    }
+
+    async function copyResult() {
+      const summary = getResultSummary();
+      try {
+        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+          throw new Error("Clipboard access is unavailable");
+        }
+        await navigator.clipboard.writeText(summary);
+        $("copy-status").textContent = "Result copied to clipboard.";
+      } catch {
+        $("copy-status").textContent = "Copying failed. Select and copy the result below.";
+        $("copy-text").value = summary;
+        $("copy-fallback").hidden = false;
+      }
+    }
+
     $("next").addEventListener("click", () => {
       if (!answered) return;
       if (current === questions.length - 1) showResults();
@@ -283,11 +315,15 @@
       current = 0;
       score = 0;
       $("score").textContent = "✦  0 points";
+      $("copy-status").textContent = "";
+      $("copy-text").value = "";
+      $("copy-fallback").hidden = true;
       $("results").hidden = true;
       $("quiz").hidden = false;
       $("hint").hidden = false;
       renderQuestion(true);
     });
+    $("copy-result").addEventListener("click", copyResult);
     document.addEventListener("keydown", (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.repeat || $("quiz").hidden || answered) return;
       if (/^[1-4]$/.test(event.key)) {
