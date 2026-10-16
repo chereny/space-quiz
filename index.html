@@ -109,6 +109,14 @@
     .result-score span { color: var(--muted); font-size: 12px; }
     .result-stats { display: flex; justify-content: center; gap: 35px; font-size: 12px; color: var(--muted); }
     .result-stats strong { display: block; font-size: 19px; color: var(--text); }
+    .review-toggle { margin-top: 16px; }
+    .missed-review { margin-top: 18px; text-align: left; }
+    .missed-review ol { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .missed-review li { padding: 14px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+    .missed-review h3 { margin: 0 0 9px; font-size: 14px; line-height: 1.45; }
+    .missed-review p { margin: 5px 0; font-size: 12px; }
+    .missed-review strong { color: var(--text); }
+    .perfect-score { margin: 18px 0 0 !important; color: var(--green) !important; font-weight: 650; }
     @keyframes float { 50% { transform: translateY(-6px) rotate(2deg); } }
     @keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes celebrate { 50% { transform: scale(1.025); box-shadow: 0 0 0 5px #65bb8220; } }
@@ -166,6 +174,11 @@
       <p id="result-message"></p>
       <div class="result-score"><strong id="final-score"></strong><span>your mission score</span></div>
       <div class="result-stats"><div><strong id="correct-total"></strong>Correct answers</div><div><strong id="accuracy"></strong>Accuracy</div></div>
+      <button class="primary review-toggle" id="review-toggle" aria-expanded="false" aria-controls="missed-review" hidden>Review missed answers</button>
+      <p class="perfect-score" id="perfect-score" hidden>No missed answers — you answered every question correctly.</p>
+      <section class="missed-review" id="missed-review" aria-label="Missed answer review" hidden>
+        <ol id="missed-answers"></ol>
+      </section>
       <button class="primary" id="restart">Explore again <span aria-hidden="true">↻</span></button>
     </section>
     <p class="hint" id="hint">Choose your answer, then continue. <span aria-hidden="true">Keys <kbd>1</kbd>–<kbd>4</kbd> work, too.</span></p>
@@ -189,6 +202,7 @@
     let current = 0;
     let score = 0;
     let answered = false;
+    const missedAnswers = [];
 
     function updateProgress(completed) {
       $("progress").style.width = `${completed / questions.length * 100}%`;
@@ -228,6 +242,12 @@
       const item = questions[current];
       const correct = index === item.correct;
       if (correct) score++;
+      else missedAnswers.push({
+        question: item.question,
+        selected: item.options[index],
+        correct: item.options[item.correct],
+        fact: item.fact
+      });
       const buttons = [...$("answers").children];
       buttons.forEach((button, i) => {
         button.disabled = true;
@@ -258,6 +278,28 @@
       $("quiz").hidden = true;
       $("hint").hidden = true;
       $("results").hidden = false;
+      $("missed-review").hidden = true;
+      $("review-toggle").setAttribute("aria-expanded", "false");
+      $("review-toggle").hidden = missedAnswers.length === 0;
+      $("perfect-score").hidden = missedAnswers.length !== 0;
+      $("missed-answers").replaceChildren(...missedAnswers.map((answer) => {
+        const entry = document.createElement("li");
+        const question = document.createElement("h3");
+        question.textContent = answer.question;
+        entry.append(question);
+        for (const [label, text] of [
+          ["Your answer", answer.selected],
+          ["Correct answer", answer.correct],
+          ["Why", answer.fact]
+        ]) {
+          const detail = document.createElement("p");
+          const heading = document.createElement("strong");
+          heading.textContent = `${label}: `;
+          detail.append(heading, document.createTextNode(text));
+          entry.append(detail);
+        }
+        return entry;
+      }));
       $("progress-label").textContent = "10 of 10 questions completed";
       const result = score >= 8
         ? ["🚀", "Rocket", "You’re a cosmic natural!", "Stellar work. Your space knowledge is ready for its next mission."]
@@ -274,6 +316,12 @@
       $("result-title").focus();
     }
 
+    $("review-toggle").addEventListener("click", () => {
+      const expanded = $("review-toggle").getAttribute("aria-expanded") !== "true";
+      $("review-toggle").setAttribute("aria-expanded", String(expanded));
+      $("review-toggle").textContent = expanded ? "Hide missed answers" : "Review missed answers";
+      $("missed-review").hidden = !expanded;
+    });
     $("next").addEventListener("click", () => {
       if (!answered) return;
       if (current === questions.length - 1) showResults();
@@ -282,7 +330,14 @@
     $("restart").addEventListener("click", () => {
       current = 0;
       score = 0;
+      missedAnswers.length = 0;
       $("score").textContent = "✦  0 points";
+      $("review-toggle").hidden = true;
+      $("review-toggle").setAttribute("aria-expanded", "false");
+      $("review-toggle").textContent = "Review missed answers";
+      $("perfect-score").hidden = true;
+      $("missed-review").hidden = true;
+      $("missed-answers").replaceChildren();
       $("results").hidden = true;
       $("quiz").hidden = false;
       $("hint").hidden = false;
