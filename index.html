@@ -189,21 +189,33 @@
     let current = 0;
     let score = 0;
     let answered = false;
+    let activeQuestions = questions;
+
+    function shuffleQuestions() {
+      const shuffled = [...questions];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
 
     function updateProgress(completed) {
-      $("progress").style.width = `${completed / questions.length * 100}%`;
-      document.querySelector('[role="progressbar"]').setAttribute("aria-valuenow", completed);
+      $("progress").style.width = `${completed / activeQuestions.length * 100}%`;
+      const progressBar = document.querySelector('[role="progressbar"]');
+      progressBar.setAttribute("aria-valuemax", activeQuestions.length);
+      progressBar.setAttribute("aria-valuenow", completed);
     }
 
     function renderQuestion(focus = false) {
       answered = false;
-      const item = questions[current];
-      $("progress-label").innerHTML = `<strong>Question ${String(current + 1).padStart(2, "0")}</strong> / ${questions.length}`;
+      const item = activeQuestions[current];
+      $("progress-label").innerHTML = `<strong>Question ${String(current + 1).padStart(2, "0")}</strong> / ${activeQuestions.length}`;
       $("category").textContent = item.category;
       $("question").textContent = item.question;
       $("feedback").hidden = true;
       $("next").disabled = true;
-      $("next").innerHTML = `${current === questions.length - 1 ? "See my results" : "Next question"} <span aria-hidden="true">→</span>`;
+      $("next").innerHTML = `${current === activeQuestions.length - 1 ? "See my results" : "Next question"} <span aria-hidden="true">→</span>`;
       $("answers").replaceChildren(...item.options.map((option, index) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -225,7 +237,7 @@
     function selectAnswer(index) {
       if (answered) return;
       answered = true;
-      const item = questions[current];
+      const item = activeQuestions[current];
       const correct = index === item.correct;
       if (correct) score++;
       const buttons = [...$("answers").children];
@@ -258,7 +270,7 @@
       $("quiz").hidden = true;
       $("hint").hidden = true;
       $("results").hidden = false;
-      $("progress-label").textContent = "10 of 10 questions completed";
+      $("progress-label").textContent = `${activeQuestions.length} of ${activeQuestions.length} questions completed`;
       const result = score >= 8
         ? ["🚀", "Rocket", "You’re a cosmic natural!", "Stellar work. Your space knowledge is ready for its next mission."]
         : score >= 5
@@ -268,20 +280,21 @@
       $("reaction").setAttribute("aria-label", result[1]);
       $("result-title").textContent = result[2];
       $("result-message").textContent = result[3];
-      $("final-score").textContent = `${score} / ${questions.length}`;
+      $("final-score").textContent = `${score} / ${activeQuestions.length}`;
       $("correct-total").textContent = score;
-      $("accuracy").textContent = `${score / questions.length * 100}%`;
+      $("accuracy").textContent = `${score / activeQuestions.length * 100}%`;
       $("result-title").focus();
     }
 
     $("next").addEventListener("click", () => {
       if (!answered) return;
-      if (current === questions.length - 1) showResults();
+      if (current === activeQuestions.length - 1) showResults();
       else { current++; renderQuestion(true); }
     });
     $("restart").addEventListener("click", () => {
       current = 0;
       score = 0;
+      activeQuestions = shuffleQuestions();
       $("score").textContent = "✦  0 points";
       $("results").hidden = true;
       $("quiz").hidden = false;
